@@ -1,0 +1,21 @@
+spring:
+  application:
+    name: wallet
+  data:
+    mongodb:
+      host: localhost # The hostname or IP address of your MongoDB server
+      port: 27017    # The port number your MongoDB server is listening on (default is 27017)
+      database: database # The name of the database to connect to
+logging:
+  level:
+    br.roggen.recargapay.wallet: DEBUG
+    br.roggen.recargapay.wallet.entrypoint: INFO
+    br.roggen.recargapay.wallet.usecase: INFO
+  jackson:
+    deserialization:
+      use-big-decimal-for-floats: true
+      write-big-decimal-as-plain: false
+      strip-trailing-bigdecimal-zeroes: false
+  data.mongodb.auto-index-creation: true
+server:
+  port: 8085
