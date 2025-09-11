@@ -1,104 +1,123 @@
 # 💳 Wallet API
 
-A **Wallet API** é um serviço RESTful para simulação e gerenciamento de carteiras digitais.  
-Ela foi projetada para testes de carga, automação e cenários de integração entre múltiplos usuários, garantindo operações financeiras consistentes.
+[![Java](https://img.shields.io/badge/Java-24-blue)](https://www.oracle.com/java/)
+[![Spring](https://img.shields.io/badge/Spring-Boot-green)](https://spring.io/projects/spring-boot)
+[![MongoDB](https://img.shields.io/badge/MongoDB-Database-brightgreen)](https://www.mongodb.com/)
+[![Gradle](https://img.shields.io/badge/Gradle-Build-orange)](https://gradle.org/)
+[![Docker](https://img.shields.io/badge/Docker-Container-blue)](https://www.docker.com/)
+
+The **Wallet API** is a RESTful service for simulating and managing digital wallets.  
+It was designed for **load testing**, **automation**, and **integration scenarios** between multiple users, ensuring consistent financial operations.
 
 ---
 
-## 🚀 Funcionalidades
-- **Usuários**
-    - Criação e autenticação simplificada via headers.
-- **Carteiras**
-    - Cada usuário pode ter uma ou mais carteiras.
-    - Consulta de saldo em tempo real.
-- **Operações**
-    - **Depósito**: adiciona valor à carteira.
-    - **Retirada**: remove valor da carteira (sem permitir saldo negativo).
-    - **Transferência**: envia valores entre carteiras distintas de forma atômica.
-- **Validações**
-    - Nenhuma operação permite saldo negativo.
-    - Todas as transações retornam o saldo atualizado.
+## 🚀 Features
+- **Users**
+  - Simplified creation and authentication via headers.
+- **Wallets**
+  - Each user can have one or more wallets.
+  - Real-time balance queries.
+- **Operations**
+  - **Deposit**: adds funds to the wallet.
+  - **Withdraw**: removes funds from the wallet (without allowing negative balance).
+  - **Transfer**: atomically transfers funds between different wallets.
+- **Validations**
+  - No operation allows negative balance.
+  - All transactions return the updated balance.
 
 ---
 
 ## 📡 Endpoints
 
-### 👤 Usuários
-| Método | Endpoint       | Descrição             |
-|--------|----------------|-----------------------|
-| POST   | `/users`       | Cria um novo usuário |
+### 👤 Users
+| Method | Endpoint       | Description        |
+|--------|----------------|--------------------|
+| POST   | `/users`       | Creates a new user |
+
+### 💼 Wallets
+| Method | Endpoint        | Description              |
+|--------|-----------------|--------------------------|
+| POST   | `/wallets`      | Creates a new wallet     |
+| GET    | `/wallets/{id}` | Retrieves wallet balance |
+
+### 💰 Operations
+| Method | Endpoint                                      | Description             |
+|--------|-----------------------------------------------|-------------------------|
+| PATCH  | `/wallets/{id}/deposit`                       | Performs a deposit      |
+| PATCH  | `/wallets/{id}/withdraw`                      | Performs a withdrawal   |
+| PATCH  | `/wallets/{id}/transfer/to/{targetWalletId}`  | Performs a transfer     |
 
 ---
 
-### 💼 Carteiras
-| Método | Endpoint     | Descrição                |
-|--------|--------------|--------------------------|
-| POST   | `/wallets`   | Cria uma nova carteira   |
-| GET    | `/wallets/{id}` | Consulta saldo de uma carteira |
-
----
-
-### 💰 Operações
-| Método | Endpoint                                      | Descrição                       |
-|--------|-----------------------------------------------|---------------------------------|
-| PATCH  | `/wallets/{id}/deposit`                       | Realiza depósito                |
-| PATCH  | `/wallets/{id}/withdraw`                      | Realiza retirada                |
-| PATCH  | `/wallets/{id}/transfer/to/{targetWalletId}`  | Realiza transferência           |
-
----
-
-## 🔐 Autenticação
-Todas as requisições que envolvem **carteiras e operações** devem conter os headers:
+## 🔐 Authentication
+All requests involving **wallets and operations** must include the following headers:
 
 ```http
-X-username: <nome do usuário>
-X-password: <senha do usuário>
+X-username: <user name>
+X-password: <user password>
 ```
 
+---
+
+## 📊 Notes
+- Usernames must be unique.
+- No balance can be negative.
+- Transfers debit and credit wallets instantly (synchronously).
+- The project includes integration with automated **stress test scripts** (Node.js).
 
 ---
 
-## 📊 Observações
-- Nenhum nome de usuário pode repetir.
-- Nenhum saldo pode ficar negativo.
-- Transferências debitam e creditam as carteiras de forma instântanea (Sincrona).
-- Projeto possui integração com scripts automatizados de stress test (Node.js)
+## ⚙️ Prerequisites
 
----
-
-## ⚙️ Pré-requisitos
-
-- **JDK 24** (ou superior)
+- **JDK 24** (or higher)
 - **Docker**
-- **Node** (Testes de Stress)
+- **Node.js** (for Stress Tests)
 
-## ▶️ Executando
+---
 
-### 1. Executar a aplicação
+## ▶️ Quick Start
+
+Clone the repository and run the application:
+
 ```bash
-  ./gradlew bootRun
+git clone https://github.com/your-username/wallet-api.git
+cd wallet-api
+./gradlew bootRun
 ```
 
-## 🧪 Executando Testes
+The API will be available at:  
+👉 `http://localhost:8080`
 
-### 1. Executar build da aplicação
+---
+
+## 🧪 Running Tests
+
+Build and test the application:
+
 ```bash
-  ./gradlew clean build
+./gradlew clean build
 ```
 
-## 📊 Testes de Stress
+---
 
-### 1. Executar a aplicação
+## 📊 Stress Tests
+
+Start the application:
+
 ```bash
-  ./gradlew bootRun
+./gradlew bootRun
 ```
 
-### 2. Executar massa de dados
+Run data setup:
+
 ```bash
-  node setupWallets.js
+node setupWallets.js
 ```
 
-### 3. Executar multiplas operações em paralelo
+Execute multiple parallel operations:
+
 ```bash
-  node run40kOperations.js
+node run40kOperations.js
 ```
+
+---
