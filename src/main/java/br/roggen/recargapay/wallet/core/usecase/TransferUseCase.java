@@ -56,7 +56,7 @@ public class TransferUseCase {
         log.info("wallet to found walletId={}", walletTo.getId());
 
         var transactionFrom = Transaction.createWithdraw(walletFrom, input.value());
-        var transactionTo = Transaction.createDeposit(walletFrom, input.value());
+        var transactionTo = Transaction.createDeposit(walletTo, input.value());
 
         log.info("creating both transactions");
 
