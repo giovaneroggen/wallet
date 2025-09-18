@@ -2,16 +2,18 @@ package br.roggen.recargapay.wallet.core.usecase;
 
 import br.roggen.recargapay.wallet.core.domain.Transaction;
 import br.roggen.recargapay.wallet.core.domain.Transfer;
+import br.roggen.recargapay.wallet.core.exception.TransferConflictException;
 import br.roggen.recargapay.wallet.core.exception.WalletConflictException;
-import br.roggen.recargapay.wallet.core.exception.WalletNotFoundException;
 import br.roggen.recargapay.wallet.core.repository.TransactionRepository;
 import br.roggen.recargapay.wallet.core.repository.TransferRepository;
 import br.roggen.recargapay.wallet.core.repository.UserRepository;
 import br.roggen.recargapay.wallet.core.repository.WalletRepository;
 import br.roggen.recargapay.wallet.core.usecase.input.TransferInput;
 import br.roggen.recargapay.wallet.core.usecase.output.TransferOutput;
+import com.mongodb.MongoException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.mongodb.MongoTransactionException;
 import org.springframework.retry.annotation.Backoff;
 import org.springframework.retry.annotation.Recover;
 import org.springframework.retry.annotation.Retryable;
@@ -39,7 +41,15 @@ public class TransferUseCase {
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW) // Each retry gets a new transaction
-    @Retryable(retryFor = DataIntegrityViolationException.class, backoff = @Backoff(delay = 5000))
+    @Retryable(
+            retryFor = {
+                    DataIntegrityViolationException.class,
+                    MongoTransactionException.class,
+                    MongoException.class
+            },
+            backoff = @Backoff(delay = 200, maxDelay = 2000, multiplier = 2.0), // retry exponencial
+            maxAttempts = 5
+    )
     public TransferOutput execute(TransferInput input){
         var user = userRepository.findRequiredByUsername(input.username());
         log.info("user found userId={}", user.getId());
@@ -67,7 +77,7 @@ public class TransferUseCase {
 
         log.debug("deposit initialized from wallet={} value={} balance={}", walletTo.getId(), input.value(), walletTo.getBalance());
         walletTo.deposit(input.value());
-        transactionTo.finish(walletFrom);
+        transactionTo.finish(walletTo);
         log.debug("deposit finished from wallet={} value={}", walletTo.getId(), input.value());
 
         this.walletRepository.save(walletFrom);
@@ -86,8 +96,20 @@ public class TransferUseCase {
     }
 
     @Recover
-    public TransferOutput recover(DataIntegrityViolationException ex){
-        log.error("must wait another transactions");
-        throw ex;
+    public TransferOutput recover(MongoTransactionException ex) {
+        log.error("MongoTransactionException after retries: {}", ex.getMessage(), ex);
+        throw new TransferConflictException("Transfer failed due to Mongo transaction error", ex);
+    }
+
+    @Recover
+    public TransferOutput recover(MongoException ex) {
+        log.error("MongoException after retries: {}", ex.getMessage(), ex);
+        throw new TransferConflictException("Transfer failed due to Mongo transient conflict", ex);
+    }
+
+    @Recover
+    public TransferOutput recover(DataIntegrityViolationException ex) {
+        log.error("Data integrity error after retries: {}", ex.getMessage(), ex);
+        throw new TransferConflictException("Transfer failed due to integrity violation", ex);
     }
 }

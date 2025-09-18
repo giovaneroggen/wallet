@@ -12,7 +12,7 @@ public class SwaggerConfig {
     public OpenAPI customOpenAPI() {
         return new OpenAPI()
                 .info(new Info()
-                        .title("Ticket API")
+                        .title("Wallet API")
                         .version("v1")
                         .description("Documentação da API de Tickets"));
     }

@@ -105,7 +105,7 @@ class TransferControllerTest extends WalletApplicationTests {
                         .header("X-password", UserFixture.VALID_PASSWORD)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isUnprocessableEntity());
+                .andExpect(status().isConflict());
     }
 
     @Test

@@ -33,7 +33,7 @@ function releaseLock(walletId) {
 }
 
 // Função para executar operação e logar saldo
-async function performOperation(wallet, type, value, targetWallet=null) {
+async function performOperation(wallet, type, value, targetWallet = null, stats = null) {
     let apiUrl = `${baseUrl}/wallets/${wallet.walletId}`;
     if (type === 'deposit') apiUrl += '/deposit';
     if (type === 'withdraw') apiUrl += '/withdraw';
@@ -45,15 +45,28 @@ async function performOperation(wallet, type, value, targetWallet=null) {
             headers: { 'X-username': wallet.username, 'X-password': wallet.password }
         });
     } catch (err) {
-        if (err.response && err.response.status >= 400 && err.response.status <= 500) {
-            console.warn(`⚠️ Operação ${type} falhou para wallet ${wallet.walletId}:`, err.response.data || err.message);
+        if (err.response) {
+            const status = err.response.status;
+            const data = err.response.data;
+            const logEntry = {
+                type,
+                walletId: wallet.walletId,
+                username: wallet.username,
+                targetWalletId: targetWallet ? targetWallet.walletId : null,
+                value,
+                status,
+                errorMessage: data?.message || data || err.message,
+                timestamp: new Date().toISOString()
+            };
+            fs.appendFileSync(operationsLog, JSON.stringify(logEntry) + '\n');
+            console.warn(`⚠️ Operação ${type} falhou para wallet ${wallet.walletId} (status ${status}):`, logEntry.errorMessage);
             return;
         } else {
+            console.error(`❌ Erro inesperado na operação ${type} wallet ${wallet.walletId}:`, err.message);
             throw err;
         }
     }
 
-    // Aplica lock apenas para atualizar saldo local
     await acquireLock(wallet.walletId);
     if (type === 'transfer' && targetWallet) await acquireLock(targetWallet.walletId);
 
@@ -70,6 +83,11 @@ async function performOperation(wallet, type, value, targetWallet=null) {
         const apiBalance = res.data.balanceAfterOperation;
         const valid = wallet.balance === apiBalance;
 
+        if (!valid && stats) {
+            stats.divergence++;
+            console.warn(`⚠️ Saldo divergente na carteira ${wallet.walletId}: local=${wallet.balance} api=${apiBalance}`);
+        }
+
         const logEntry = {
             type,
             walletId: wallet.walletId,
@@ -83,16 +101,13 @@ async function performOperation(wallet, type, value, targetWallet=null) {
             timestamp: new Date().toISOString()
         };
         fs.appendFileSync(operationsLog, JSON.stringify(logEntry) + '\n');
-
-        if (!valid) {
-            console.warn(`⚠️ Saldo divergente na carteira ${wallet.walletId}: local=${wallet.balance} api=${apiBalance}`);
-        }
     } finally {
         releaseLock(wallet.walletId);
         if (type === 'transfer' && targetWallet) releaseLock(targetWallet.walletId);
     }
 }
 
+// Função para garantir saldo mínimo
 async function ensureBalance(wallet) {
     if (wallet.balance < 1) {
         const depositValue = 100 + Math.floor(Math.random() * 5000);
@@ -108,33 +123,69 @@ async function safeValue(wallet) {
 }
 
 // Escolhe wallet aleatória
-function randomWallet(excludeId=null) {
+function randomWallet(excludeId = null) {
     let choices = excludeId ? wallets.filter(w => w.walletId !== excludeId) : wallets;
     return choices[Math.floor(Math.random() * choices.length)];
 }
 
 // Executa todas as operações em batches
 (async () => {
+    const finalStats = { success: 0, failed: 0, conflict: 0, divergence: 0 };
+
     for (let i = 0; i < totalOperations; i += batchSize) {
         let batch = [];
-        for (let j = 0; j < batchSize && (i+j)<totalOperations; j++) {
+        let batchStats = { success: 0, failed: 0, conflict: 0, divergence: 0 };
+
+        for (let j = 0; j < batchSize && (i + j) < totalOperations; j++) {
             const opTypeRand = Math.random();
             const wallet = randomWallet();
-            if (opTypeRand < 0.33) {
-                const value = 50 + Math.floor(Math.random() * 5000);
-                batch.push(performOperation(wallet, 'deposit', value));
-            } else if (opTypeRand < 0.66) {
-                const value = await safeValue(wallet);
-                batch.push(performOperation(wallet, 'withdraw', value));
-            } else {
-                const target = randomWallet(wallet.walletId);
-                const value = await safeValue(wallet);
-                batch.push(performOperation(wallet, 'transfer', value, target));
-            }
-        }
-        await Promise.all(batch);
-        if ((i/batchSize)%10===0) console.log(`✔️ ${i+batch.length} operações processadas`);
-    }
-    console.log('🎉 Todas as operações concluídas');
-})();
 
+            const wrappedOp = async () => {
+                try {
+                    let target = null;
+                    let value;
+
+                    if (opTypeRand < 0.33) {
+                        value = 50 + Math.floor(Math.random() * 5000);
+                        await performOperation(wallet, 'deposit', value, null, batchStats);
+                    } else if (opTypeRand < 0.66) {
+                        value = await safeValue(wallet);
+                        await performOperation(wallet, 'withdraw', value, null, batchStats);
+                    } else {
+                        target = randomWallet(wallet.walletId);
+                        value = await safeValue(wallet);
+                        await performOperation(wallet, 'transfer', value, target, batchStats);
+                    }
+
+                    batchStats.success++;
+                } catch (err) {
+                    batchStats.failed++;
+                    if (err.response && err.response.status === 409) {
+                        batchStats.conflict++;
+                    }
+                    console.error(`❌ Operação falhou para wallet ${wallet.walletId}:`, err.message);
+                }
+            };
+
+            batch.push(wrappedOp());
+        }
+
+        await Promise.all(batch);
+
+        // Atualiza estatísticas finais
+        finalStats.success += batchStats.success;
+        finalStats.failed += batchStats.failed;
+        finalStats.conflict += batchStats.conflict;
+        finalStats.divergence += batchStats.divergence;
+
+        console.log(`📊 Batch ${(i / batchSize) + 1}: Sucesso=${batchStats.success}, Falha=${batchStats.failed}, Conflito=${batchStats.conflict}, Divergência=${batchStats.divergence}`);
+    }
+
+    console.log('🎉 Todas as operações concluídas');
+    console.log('========== RESUMO FINAL ==========');
+    console.log(`Total de operações    : ${totalOperations}`);
+    console.log(`Sucesso               : ${finalStats.success}`);
+    console.log(`Falha                 : ${finalStats.failed}`);
+    console.log(`Conflito (409)        : ${finalStats.conflict}`);
+    console.log(`Divergência de saldo  : ${finalStats.divergence}`);
+})();
